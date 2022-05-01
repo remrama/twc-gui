@@ -7,6 +7,7 @@ import sys
 import time
 import json
 import serial
+import random
 import logging
 import warnings
 
@@ -18,10 +19,10 @@ import config as c
 
 from PyQt5 import QtWidgets, QtGui, QtCore, QtMultimedia
 
-def load_button_legend():
-    with open("./button_legend.json", "r") as f:
-        data = json.load(f)
-    return data
+# def load_button_legend():
+#     with open("./button_legend.json", "r") as f:
+#         data = json.load(f)
+#     return data
 
 class BorderWidget(QtWidgets.QFrame):
     """thing to make a border
@@ -92,7 +93,7 @@ class myWindow(QtWidgets.QMainWindow):
     def __init__(self, subject_id, session_id):
         super().__init__()
 
-        self.legend = load_button_legend()
+        # self.legend = load_button_legend()
         
         self.n_report_counter = 0 # cumulative counter for determining filenames
 
@@ -119,7 +120,13 @@ class myWindow(QtWidgets.QMainWindow):
 
         self.init_logger()
 
+        self.portcodes = {
+            "DreamReport": 10,
+            "Note": 20,
+        }
+
         self.soundfile_dir = c.SOUNDFILE_DIRECTORY
+        self.extract_cue_basenames()
         self.preload_soundfiles()
 
         self.init_recorder()
@@ -128,20 +135,20 @@ class myWindow(QtWidgets.QMainWindow):
 
         init_msg = f"Opened TWC interface v{c.VERSION}"
         self.log_info_msg(init_msg)
-        # save the legend as its own file, in case things change later
-        # (later it might make more sense to save version numbers and work from that)
-        legend_out_fname = os.path.join(self.session_dir,
-            f"{self.subj_sess_ids}_legend.json")
-        with open(legend_out_fname, "w", encoding="utf-8") as f:
-            json.dump(self.legend, f, indent=4, ensure_ascii=False)
-        # self.log_info_msg(json.dumps(self.legend), print_in_gui=False)
+        # # save the legend as its own file, in case things change later
+        # # (later it might make more sense to save version numbers and work from that)
+        # legend_out_fname = os.path.join(self.session_dir,
+        #     f"{self.subj_sess_ids}_legend.json")
+        # with open(legend_out_fname, "w", encoding="utf-8") as f:
+        #     json.dump(self.legend, f, indent=4, ensure_ascii=False)
+        # # self.log_info_msg(json.dumps(self.legend), print_in_gui=False)
 
 
     def showErrorPopup(self, short_msg, long_msg=None):
         self.log_info_msg("ERROR")
         win = QtWidgets.QMessageBox()
         # win.setIcon(QtWidgets.QMessageBox.Critical)
-        win.setIconPixmap(QtGui.QPixmap("./img/fish.ico"))
+        win.setIconPixmap(QtGui.QPixmap("./img/exit.png"))
         win.setText(short_msg)
         if long_msg is not None:
             win.setInformativeText(long_msg)
@@ -170,23 +177,15 @@ class myWindow(QtWidgets.QMainWindow):
         # self.eventList.update()
 
 
-    def send_port_msg(self, button_label, prefix=None, suffix=None):
+    def send_port_msg(self, portcode, port_msg):
         """wrapper around serial.send
         to make sure the msg also gets logged to output file and gui
         """
-        port_msg = self.legend[button_label]["port_msg"]
+        log_msg = f"{portcode}-{port_msg}"
         if c.PORT_ADDRESS is not None:
-            serial.send(port_msg)
-            port_str = "port"
+            serial.send(portcode)
         else:
-            port_str = "noport"
-        # send to log file
-        button_str = button_label.lower().replace(" ", "_")
-        log_msg = f"{port_str}::{button_str}::{port_msg}"
-        if prefix is not None:
-            log_msg = prefix + "-" + log_msg
-        if suffix is not None:
-            log_msg = log_msg + "-" + suffix
+            log_msg = "!!!-" + log_msg
         self.log_info_msg(log_msg)
 
 
@@ -299,6 +298,7 @@ class myWindow(QtWidgets.QMainWindow):
         # self.setGeometry(*xywh)
         # self.setMinimumSize(300, 200)    
         self.setWindowTitle("TWC Interface")
+        self.setWindowIcon(QtGui.QIcon("./img/fish.ico"))
         # self.setGeometry(100, 100, 600, 400)
         self.show()
 
@@ -369,6 +369,14 @@ class myWindow(QtWidgets.QMainWindow):
         elif state == QtMultimedia.QMediaRecorder.RecordingState:
             self.recorder.stop()
 
+    @QtCore.pyqtSlot()
+    def on_cuePlayingChange(self):
+        """To uncheck the cue button if something stops on its own."""
+        if not self.sender().isPlaying():
+            self.cueButton.setChecked(False)
+
+
+
     def recorder_state_change(self, state):
         if state == QtMultimedia.QMediaRecorder.StoppedState:
             self.logViewer.setStyleSheet("border: 0px solid red;")
@@ -378,58 +386,95 @@ class myWindow(QtWidgets.QMainWindow):
     def handleDreamReportButton(self):
         self.record() # i think this function handles the start/stop decision
         if self.sender().isChecked():
-            msg_prefix = "DREAMMIC_ON"
+            port_msg = "DreamReport+start"
             # self.logViewer.setStyleSheet("border: 3px solid red;")
             # self.sender().setStyleSheet("background-color : lightgrey")
         else:
-            msg_prefix = "DREAMMIC_OFF"
+            port_msg = "DreamReport+stop"
             # self.logViewer.setStyleSheet("border: 0px solid red;")
             # self.sender().setStyleSheet("background-color : lightblue")
         button_label = self.sender().text()
-        self.send_port_msg(button_label, msg_prefix)
+        portcode = self.portcodes["DreamReport"]
+        self.send_port_msg(portcode, port_msg)
 
+    def extract_cue_basenames(self):
+        self.cue_basename_list = []
+        for cue_basename in os.listdir(self.soundfile_dir):
+            if "-" in cue_basename and cue_basename.endswith(".wav"):
+                cue_name, portcode = cue_basename.split(".")[0].split("-")
+                if cue_name.isalpha() and portcode.isdigit():
+                    self.portcodes[cue_basename] = int(portcode)
+                    self.cue_basename_list.append(cue_basename)
 
     def preload_soundfiles(self):
         self.playables = {}
-        for k, v in self.legend.items():
-            if "file" in v.keys():
-                fname = os.path.join(self.soundfile_dir, v["file"])
-                assert os.path.isfile(fname) and fname.endswith(".wav")
-                content = QtCore.QUrl.fromLocalFile(fname)
-                player = QtMultimedia.QSoundEffect()
-                player.setSource(content)
-                player.setVolume(0) # 0 to 1
-                # player.setLoopCount(1) # QtMultimedia.QSoundEffect.Infinite
-                self.playables[k] = player
+        for cue_basename in self.cue_basename_list:
+            cue_fullpath = os.path.join(self.soundfile_dir, cue_basename)
+            content = QtCore.QUrl.fromLocalFile(cue_fullpath)
+            player = QtMultimedia.QSoundEffect()
+            player.setSource(content)
+            player.setVolume(0) # 0 to 1
+            # player.setLoopCount(1) # QtMultimedia.QSoundEffect.Infinite
+            # Connect to a function that gets called when it starts or stops playing.
+            # Only need it for the "stop" so it unchecks the cue button when not manually stopped.
+            player.playingChanged.connect(self.on_cuePlayingChange)
+            self.playables[cue_basename] = player
 
-    def handleCueButton(self, button_label):
-        """most of the buttons can be handled the same way
-        since they all do the same thing, just playing diff
-        files, so this is the one that should catch most
-        """
-        # button_txt = self.sender().text()
-        self.send_port_msg(button_label, prefix="CUE")
-        self.playables[button_label].play()
-
+    @QtCore.pyqtSlot()
+    def handleCueButton(self):
+        if self.cueButton.isChecked():
+            # #### play selected item
+            # selected_item = self.rightList.currentItem()
+            # if selected_item is not None:
+            #     cue_basename = selected_item.text()
+            #     portcode = self.portcodes[cue_basename]
+            #     port_msg = "CUE+" + cue_basename
+            #     self.send_port_msg(portcode, port_msg)
+            #     self.playables[cue_basename].play()
+            #### play random
+            n_list_items = self.rightList.count()
+            if n_list_items > 0:
+                selected_item = random.choice(range(n_list_items))
+                cue_basename = self.rightList.item(selected_item).text()
+                portcode = self.portcodes[cue_basename]
+                port_msg = "CUE+" + cue_basename
+                self.send_port_msg(portcode, port_msg)
+                self.playables[cue_basename].play()
+        else: # stop
+            for k, v in self.playables.items():
+                if v.isPlaying():
+                    v.stop()
+                    self.send_port_msg(1, "STOPPED")
 
     def handleNoteButton(self):
-        button_label = self.sender().text() # this is dumb
         text, ok = QtWidgets.QInputDialog.getText(self, "Text Input Dialog", "Custom note:")
         # self.subject_id.setValidator(QtGui.QIntValidator(0, 999)) # must be a 3-digit number
         if ok: # True of OK button was hit, False otherwise (cancel button)
-            self.send_port_msg(button_label, prefix="NOTE", suffix=text)
+            portcode = self.portcodes["Note"]
+            port_msg = "NOTE+" + text
+            self.send_port_msg(portcode, port_msg)
 
-    def generate_cue_button(self, button_label):
-        """run this separate outside of overall button
-        creation because otherwise there is some persistent
-        with the variables??
-        """
-        b = QtWidgets.QPushButton(button_label, self)
-        help_string = self.legend[button_label]["help"]
-        b.setStatusTip(help_string)
-        # b.setShortcut("Ctrl+R")
-        b.clicked.connect(lambda: self.handleCueButton(button_label))
-        return b
+    @QtCore.pyqtSlot()
+    def handleLeft2RightButton(self):
+        self.rightList.addItem(self.leftList.takeItem(self.leftList.currentRow()))
+        self.rightList.sortItems()
+
+    @QtCore.pyqtSlot()
+    def handleRight2LeftButton(self):
+        self.leftList.addItem(self.rightList.takeItem(self.rightList.currentRow()))
+        self.leftList.sortItems()
+
+    # def generate_cue_button(self, button_label):
+    #     """run this separate outside of overall button
+    #     creation because otherwise there is some persistent
+    #     with the variables??
+    #     """
+    #     b = QtWidgets.QPushButton(button_label, self)
+    #     help_string = self.legend[button_label]["help"]
+    #     b.setStatusTip(help_string)
+    #     # b.setShortcut("Ctrl+R")
+    #     b.clicked.connect(lambda: self.handleCueButton(button_label))
+    #     return b
 
     def init_CentralWidget(self):
         """The central widget holds the *non-toolbar*
@@ -462,23 +507,63 @@ class myWindow(QtWidgets.QMainWindow):
 
         ############ create buttons ################
 
-        # all cue buttons are similar so can be created simultaneously
-        self.buttons = {}
-        for k in self.legend.keys():
-            if k not in ["Dream report", "Note"]:
-                self.buttons[k] = self.generate_cue_button(k)
+        leftListHeader = QtWidgets.QLabel("Bank", self)
+        leftListHeader.setAlignment(QtCore.Qt.AlignCenter)
+        # leftListHeader.setStyleSheet("border: 1px solid red;") #changed
 
-        # dream and note buttons are special
-        dream_report_button_label = "Dream report"
-        dream_report_button = QtWidgets.QPushButton(dream_report_button_label, self)
-        dream_report_button.setStatusTip(self.legend[dream_report_button_label]["help"])
-        dream_report_button.setCheckable(True)
-        dream_report_button.clicked.connect(self.handleDreamReportButton)
+        self.leftList = QtWidgets.QListWidget()
+        self.rightList = QtWidgets.QListWidget()
+        self.leftList.setAutoScroll(True) # scrollable
+        self.leftList.setAutoScroll(True)
+        self.leftList.setSortingEnabled(True) # allow alphabetical sorting
+        self.rightList.setSortingEnabled(True)
 
-        misc_note_button_label = "Note"
-        misc_note_button = QtWidgets.QPushButton(misc_note_button_label, self)
-        misc_note_button.setStatusTip(self.legend[misc_note_button_label]["help"])
-        misc_note_button.clicked.connect(self.handleNoteButton)
+        self.cueButton = QtWidgets.QPushButton("Cue", self)
+        self.cueButton.setStatusTip("Play a random cue from the right side.")
+        self.cueButton.setShortcut("Ctrl+R")
+        self.cueButton.setCheckable(True)
+        self.cueButton.clicked.connect(self.handleCueButton)
+
+        self.left2rightButton = QtWidgets.QPushButton(">", self)
+        self.right2leftButton = QtWidgets.QPushButton("<", self)
+        self.left2rightButton.setStatusTip("Move selected item from left to right.")
+        self.right2leftButton.setStatusTip("Move selected item from right to left.")
+        self.left2rightButton.clicked.connect(self.handleLeft2RightButton)
+        self.right2leftButton.clicked.connect(self.handleRight2LeftButton)
+        cueSelectionLayout = QtWidgets.QGridLayout()
+        # cueSelectionLayout.addWidget(logViewer_header, 0, 0, 1, 1)
+        cueSelectionLayout.addWidget(leftListHeader, 0, 0, 1, 2)
+        cueSelectionLayout.addWidget(self.cueButton, 0, 3, 1, 2)
+        cueSelectionLayout.addWidget(self.leftList, 1, 0, 4, 2)
+        cueSelectionLayout.addWidget(self.rightList, 1, 3, 4, 2)
+        cueSelectionLayout.addWidget(self.left2rightButton, 2, 2, 1, 1)
+        cueSelectionLayout.addWidget(self.right2leftButton, 3, 2, 1, 1)
+        # cueSelectionLayout.addWidget(self.cueButton, 5, 3, 1, 2)
+        for c in self.cue_basename_list:
+            self.leftList.addItem(c)
+
+        # # all cue buttons are similar so can be created simultaneously
+        # self.buttons = {}
+        # for k in self.legend.keys():
+        #     if k not in ["Dream report", "Note"]:
+        #         self.buttons[k] = self.generate_cue_button(k)
+
+        dreamReportButton = QtWidgets.QPushButton("Dream report", self)
+        dreamReportButton.setStatusTip("Ask for a dream report and start recording.")
+        dreamReportButton.setCheckable(True)
+        dreamReportButton.clicked.connect(self.handleDreamReportButton)
+
+        noteButton = QtWidgets.QPushButton("Note", self)
+        noteButton.setStatusTip("Open a text box and timestamp a note.")
+        noteButton.clicked.connect(self.handleNoteButton)
+
+        buttonsLayout = QtWidgets.QVBoxLayout()
+        # buttonsLayout.setMargin(20)
+        buttonsLayout.setAlignment(QtCore.Qt.AlignCenter)
+        # buttonsLayout.setFixedSize(12, 12)
+        buttonsLayout.addWidget(dreamReportButton)
+        buttonsLayout.addWidget(noteButton)
+
 
         logViewer_header = QtWidgets.QLabel("Event log", self)
         logViewer_header.setAlignment(QtCore.Qt.AlignCenter)
@@ -486,50 +571,41 @@ class myWindow(QtWidgets.QMainWindow):
         # logViewer.setGeometry(20,20,100,700)
         self.logViewer.setAutoScroll(True)
 
-        cue_header = QtWidgets.QLabel("Audio cue buttons", self)
-        cue_header.setAlignment(QtCore.Qt.AlignCenter)
-        # cue_header.setStyleSheet("border: 1px solid red;") #changed
+        # cue_header = QtWidgets.QLabel("Audio cue buttons", self)
+        # cue_header.setAlignment(QtCore.Qt.AlignCenter)
+        # # cue_header.setStyleSheet("border: 1px solid red;") #changed
 
-        # make a subset of buttons in a vertical layout
-        left_button_layout = QtWidgets.QVBoxLayout()
-        left_button_header = QtWidgets.QLabel("Waking", self)
-        # left_button_header.setText("Waking")
-        # left_button_header.setMargin(1)
-        left_button_header.setAlignment(QtCore.Qt.AlignCenter)
-        # left_button_header.setFixedSize(12, 12)
-        left_button_layout.addWidget(left_button_header)
-        left_button_layout.addWidget(self.buttons["Biocals"])
-        left_button_layout.addWidget(self.buttons["LRLR"])
-        left_button_layout.addWidget(self.buttons["TLR Training 1"])
-        left_button_layout.addWidget(self.buttons["TLR Training 2"])
+        # # make a subset of buttons in a vertical layout
+        # left_button_layout = QtWidgets.QVBoxLayout()
+        # left_button_header = QtWidgets.QLabel("Waking", self)
+        # # left_button_header.setText("Waking")
+        # # left_button_header.setMargin(1)
+        # left_button_header.setAlignment(QtCore.Qt.AlignCenter)
+        # # left_button_header.setFixedSize(12, 12)
+        # left_button_layout.addWidget(left_button_header)
+        # left_button_layout.addWidget(self.buttons["Biocals"])
+        # left_button_layout.addWidget(self.buttons["LRLR"])
+        # left_button_layout.addWidget(self.buttons["TLR Training 1"])
+        # left_button_layout.addWidget(self.buttons["TLR Training 2"])
 
-        right_button_layout = QtWidgets.QVBoxLayout()
-        right_button_header = QtWidgets.QLabel("Sleeping", self)
-        # left_button_header.setText("Waking")
-        # right_button_header.setMargin(20)
-        right_button_header.setAlignment(QtCore.Qt.AlignCenter)
-        # left_button_header.setFixedSize(12, 12)
-        right_button_layout.addWidget(right_button_header)
-        right_button_layout.addWidget(self.buttons["TLR cue"])
-        right_button_layout.addWidget(self.buttons["TMR cue"])
+        # right_button_layout = QtWidgets.QVBoxLayout()
+        # right_button_header = QtWidgets.QLabel("Sleeping", self)
+        # # left_button_header.setText("Waking")
+        # # right_button_header.setMargin(20)
+        # right_button_header.setAlignment(QtCore.Qt.AlignCenter)
+        # # left_button_header.setFixedSize(12, 12)
+        # right_button_layout.addWidget(right_button_header)
+        # right_button_layout.addWidget(self.buttons["TLR cue"])
+        # right_button_layout.addWidget(self.buttons["TMR cue"])
 
-        bottom_button_layout = QtWidgets.QHBoxLayout()
-        bottom_button_header = QtWidgets.QLabel("Non-audio markers", self)
-        # left_button_header.setText("Waking")
-        # bottom_button_header.setMargin(20)
-        bottom_button_header.setAlignment(QtCore.Qt.AlignCenter)
-        # left_button_header.setFixedSize(12, 12)
-        bottom_button_layout.addWidget(bottom_button_header)
-        bottom_button_layout.addWidget(dream_report_button)
-        bottom_button_layout.addWidget(misc_note_button)
 
         border_widget = BorderWidget()
 
-        ## sublayout for audio cue section
-        audiocue_layout = QtWidgets.QGridLayout()
-        audiocue_layout.addWidget(cue_header, 0, 0, 1, 2) # widget, row, col, rowspan, colspan
-        audiocue_layout.addLayout(left_button_layout, 1, 0, 2, 1)
-        audiocue_layout.addLayout(right_button_layout, 1, 1, 2, 1)
+        # ## sublayout for audio cue section
+        # audiocue_layout = QtWidgets.QGridLayout()
+        # audiocue_layout.addWidget(cue_header, 0, 0, 1, 2) # widget, row, col, rowspan, colspan
+        # audiocue_layout.addLayout(left_button_layout, 1, 0, 2, 1)
+        # audiocue_layout.addLayout(right_button_layout, 1, 1, 2, 1)
 
         ## sublayout for log viewer
         viewer_layout = QtWidgets.QGridLayout()
@@ -538,7 +614,7 @@ class myWindow(QtWidgets.QMainWindow):
 
         ## sublayout for extra buttons
         extra_layout = QtWidgets.QGridLayout()
-        extra_layout.addLayout(bottom_button_layout, 0, 0, 1, 1)
+        extra_layout.addLayout(buttonsLayout, 0, 0, 1, 1)
 
         ## layout for the audio i/o monitoring
         # io_layout = QtWidgets.QGridLayout()
@@ -588,7 +664,8 @@ class myWindow(QtWidgets.QMainWindow):
 
         # this main/larger layout holds all the subwidgets and in some cases other layouts
         main_layout = QtWidgets.QGridLayout()
-        main_layout.addLayout(audiocue_layout, 0, 0, 3, 2)
+        # main_layout.addLayout(audiocue_layout, 0, 0, 3, 2)
+        main_layout.addLayout(cueSelectionLayout, 0, 0, 2, 2)
         main_layout.addLayout(extra_layout, 3, 0, 1, 2)
         main_layout.addLayout(viewer_layout, 0, 2, 2, 1)
         main_layout.addLayout(io_layout, 2, 2, 2, 1)
