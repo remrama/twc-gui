@@ -11,6 +11,7 @@ import random
 import logging
 import warnings
 
+from psychopy import parallel
 # import sounddevice as sd
 
 import config as c
@@ -40,7 +41,6 @@ class InputDialog(QtWidgets.QDialog):
     """
     def __init__(self, parent=None):
         super().__init__(parent)
-
 
         self.setWindowTitle("Session information")
 
@@ -120,6 +120,7 @@ class myWindow(QtWidgets.QMainWindow):
 
         self.init_logger()
 
+        self.pport_address = c.PORT_ADDRESS
         self.portcodes = {
             "DreamReport": 10,
             "Note": 20,
@@ -143,6 +144,7 @@ class myWindow(QtWidgets.QMainWindow):
         #     json.dump(self.legend, f, indent=4, ensure_ascii=False)
         # # self.log_info_msg(json.dumps(self.legend), print_in_gui=False)
 
+        self.init_pport()
 
     def showErrorPopup(self, short_msg, long_msg=None):
         self.log_info_msg("ERROR")
@@ -176,18 +178,27 @@ class myWindow(QtWidgets.QMainWindow):
         # self.eventList.addItem(item)
         # self.eventList.update()
 
+    def init_pport(self):
+        try:
+            self.pport = parallel.ParallelPort(address=self.pport_address)
+            self.pport.setData(0) # clear all pins out to prep for sending
+            msg = "Parallel port successfully connected."
+        except:
+            self.pport = None
+            msg = "Parallel port connection failed."
+        self.log_info_msg(msg)
 
-    def send_port_msg(self, portcode, port_msg):
-        """wrapper around serial.send
+    def send_to_pport(self, portcode, port_msg):
+        """Wrapper to avoid rewriting if not None a bunch
         to make sure the msg also gets logged to output file and gui
         """
         log_msg = f"{portcode}-{port_msg}"
-        if c.PORT_ADDRESS is not None:
-            serial.send(portcode)
+        if self.pport is not None:
+            self.pport.setData(0)
+            self.pport.setData(portcode)
         else:
             log_msg = "!!!-" + log_msg
         self.log_info_msg(log_msg)
-
 
     def init_logger(self):
         """initialize logger that writes to a log file
@@ -395,7 +406,7 @@ class myWindow(QtWidgets.QMainWindow):
             # self.sender().setStyleSheet("background-color : lightblue")
         button_label = self.sender().text()
         portcode = self.portcodes["DreamReport"]
-        self.send_port_msg(portcode, port_msg)
+        self.send_to_pport(portcode, port_msg)
 
     def extract_cue_basenames(self):
         self.cue_basename_list = []
@@ -429,7 +440,7 @@ class myWindow(QtWidgets.QMainWindow):
             #     cue_basename = selected_item.text()
             #     portcode = self.portcodes[cue_basename]
             #     port_msg = "CUE+" + cue_basename
-            #     self.send_port_msg(portcode, port_msg)
+            #     self.send_to_pport(portcode, port_msg)
             #     self.playables[cue_basename].play()
             #### play random
             n_list_items = self.rightList.count()
@@ -438,13 +449,13 @@ class myWindow(QtWidgets.QMainWindow):
                 cue_basename = self.rightList.item(selected_item).text()
                 portcode = self.portcodes[cue_basename]
                 port_msg = "CUE+" + cue_basename
-                self.send_port_msg(portcode, port_msg)
+                self.send_to_pport(portcode, port_msg)
                 self.playables[cue_basename].play()
         else: # stop
             for k, v in self.playables.items():
                 if v.isPlaying():
                     v.stop()
-                    self.send_port_msg(1, "STOPPED")
+                    self.send_to_pport(1, "STOPPED")
 
     def handleNoteButton(self):
         text, ok = QtWidgets.QInputDialog.getText(self, "Text Input Dialog", "Custom note:")
@@ -452,7 +463,7 @@ class myWindow(QtWidgets.QMainWindow):
         if ok: # True of OK button was hit, False otherwise (cancel button)
             portcode = self.portcodes["Note"]
             port_msg = "NOTE+" + text
-            self.send_port_msg(portcode, port_msg)
+            self.send_to_pport(portcode, port_msg)
 
     @QtCore.pyqtSlot()
     def handleLeft2RightButton(self):
