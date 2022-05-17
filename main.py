@@ -740,12 +740,16 @@ class myWindow(QtWidgets.QMainWindow):
         for player in self.playables.values():
             player.setVolume(float_volume)
         # self.createData()
+        if value % 10 == 0: # for now to avoid overlogging
+            self.log_info_msg(f"Set cue volume: {value:d}")
 
     def changeOutputNoiseVolume(self, value):
         # pyqt sliders only take integers but range is 0-1
         # self.volume = value / 100
         float_volume = value / 100
         self.noisePlayer.setVolume(float_volume)
+        if value % 10 == 0: # for now to avoid overlogging
+            self.log_info_msg(f"Set noise volume: {value:d}")
         # self.createData()
 
     def changeInputGain(self, value):
