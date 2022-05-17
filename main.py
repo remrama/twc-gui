@@ -431,6 +431,28 @@ class myWindow(QtWidgets.QMainWindow):
             player.playingChanged.connect(self.on_cuePlayingChange)
             self.playables[cue_basename] = player
 
+        # noise player
+        noise_basename = "pinknoise.wav"
+        noise_fullpath = os.path.join(self.soundfile_dir, noise_basename)
+        noise_content = QtCore.QUrl.fromLocalFile(noise_fullpath)
+        self.noisePlayer = QtMultimedia.QSoundEffect()
+        self.noisePlayer.setSource(noise_content)
+        self.noisePlayer.setVolume(0) # 0 to 1
+        self.noisePlayer.setLoopCount(QtMultimedia.QSoundEffect.Infinite)
+        # Connect to a function that gets called when it starts or stops playing.
+        # Only need it for the "stop" so it unchecks the cue button when not manually stopped.
+        # self.noisePlayer.playingChanged.connect(self.on_cuePlayingChange)
+
+    @QtCore.pyqtSlot()
+    def handleNoiseButton(self):
+        if self.noiseButton.isChecked():
+            # self.noisePlayer.setLoopCount(QtMultimedia.QSoundEffect.Infinite)
+            self.noisePlayer.play()
+            self.send_to_pport(81, "NOISE Started")
+        else: # not checked
+            self.noisePlayer.stop()
+            self.send_to_pport(82, "NOISE Stopped")
+
     @QtCore.pyqtSlot()
     def handleCueButton(self):
         if self.cueButton.isChecked():
@@ -535,6 +557,12 @@ class myWindow(QtWidgets.QMainWindow):
         self.cueButton.setCheckable(True)
         self.cueButton.clicked.connect(self.handleCueButton)
 
+        self.noiseButton = QtWidgets.QPushButton("Noise", self)
+        self.noiseButton.setStatusTip("Play pink noise.")
+        self.noiseButton.setShortcut("Ctrl+P")
+        self.noiseButton.setCheckable(True)
+        self.noiseButton.clicked.connect(self.handleNoiseButton)
+
         self.left2rightButton = QtWidgets.QPushButton(">", self)
         self.right2leftButton = QtWidgets.QPushButton("<", self)
         self.left2rightButton.setStatusTip("Move selected item from left to right.")
@@ -574,6 +602,7 @@ class myWindow(QtWidgets.QMainWindow):
         # buttonsLayout.setFixedSize(12, 12)
         buttonsLayout.addWidget(dreamReportButton)
         buttonsLayout.addWidget(noteButton)
+        buttonsLayout.addWidget(self.noiseButton)
 
 
         logViewer_header = QtWidgets.QLabel("Event log", self)
@@ -637,7 +666,7 @@ class myWindow(QtWidgets.QMainWindow):
 
         # add row of headers
         header_layout = QtWidgets.QHBoxLayout()
-        for label in ["Output\nVolume", "Input\nGain", "Input\nVisualization"]:
+        for label in ["Output Cue\nVolume", "Output Noise\nVolume", "Input\nGain", "Input\nVisualization"]:
             header_layout.addWidget(QtWidgets.QLabel(label, self))
         io_layout.addLayout(header_layout)
 
@@ -645,16 +674,23 @@ class myWindow(QtWidgets.QMainWindow):
         # create 2 sliders, 1 for output volume another for input gain
         # create volume slider and add to this i/o layout
         # volume slider stuff
-        volumeSlider = QtWidgets.QSlider(QtCore.Qt.Vertical)
+        cueVolumeSlider = QtWidgets.QSlider(QtCore.Qt.Vertical)
+        noiseVolumeSlider = QtWidgets.QSlider(QtCore.Qt.Vertical)
         ## sliders can only have integer values
         ## so have to use 0-100 and then divide when setting it later
-        volumeSlider.setMinimum(0)
-        volumeSlider.setMaximum(100)
+        cueVolumeSlider.setMinimum(0)
+        cueVolumeSlider.setMaximum(100)
+        cueVolumeSlider.setSingleStep(1)
+        cueVolumeSlider.setValue(0)
         # volumeSlider.setTickInterval(10)
-        volumeSlider.setSingleStep(1)
-        volumeSlider.setValue(0)
-        volumeSlider.valueChanged.connect(self.changeOutputVolume)
-        controls_layout.addWidget(volumeSlider)
+        noiseVolumeSlider.setMinimum(0)
+        noiseVolumeSlider.setMaximum(100)
+        noiseVolumeSlider.setSingleStep(1)
+        noiseVolumeSlider.setValue(0)
+        cueVolumeSlider.valueChanged.connect(self.changeOutputCueVolume)
+        noiseVolumeSlider.valueChanged.connect(self.changeOutputNoiseVolume)
+        controls_layout.addWidget(cueVolumeSlider)
+        controls_layout.addWidget(noiseVolumeSlider)
         # formLayout = QtWidgets.QFormLayout()
         # formLayout.addRow(self.tr("&Volume:"), volumeSlider)
         # io_layout.addLayout(formLayout, 1, 0, 1, 2)
@@ -697,12 +733,19 @@ class myWindow(QtWidgets.QMainWindow):
         self.main_layout = main_layout
         # self.resize(300, 300)
 
-    def changeOutputVolume(self, value):
+    def changeOutputCueVolume(self, value):
         # pyqt sliders only take integers but range is 0-1
         # self.volume = value / 100
         float_volume = value / 100
         for player in self.playables.values():
             player.setVolume(float_volume)
+        # self.createData()
+
+    def changeOutputNoiseVolume(self, value):
+        # pyqt sliders only take integers but range is 0-1
+        # self.volume = value / 100
+        float_volume = value / 100
+        self.noisePlayer.setVolume(float_volume)
         # self.createData()
 
     def changeInputGain(self, value):
