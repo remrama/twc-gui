@@ -122,8 +122,11 @@ class myWindow(QtWidgets.QMainWindow):
 
         self.pport_address = c.PORT_ADDRESS
         self.portcodes = {
-            "DreamReport": 10,
-            "Note": 20,
+            "Note": 200,
+            "DreamReport": 201,
+            "NoiseStarted": 202,
+            "NoiseStopped": 203,
+            "CueStopped": 204,
         }
 
         self.soundfile_dir = c.SOUNDFILE_DIRECTORY
@@ -448,10 +451,11 @@ class myWindow(QtWidgets.QMainWindow):
         if self.noiseButton.isChecked():
             # self.noisePlayer.setLoopCount(QtMultimedia.QSoundEffect.Infinite)
             self.noisePlayer.play()
-            self.send_to_pport(81, "NOISE Started")
+            msg = "NoiseStarted"
         else: # not checked
             self.noisePlayer.stop()
-            self.send_to_pport(82, "NOISE Stopped")
+            msg = "NoiseStopped"
+        self.send_to_pport(self.portcodes[msg], msg)
 
     @QtCore.pyqtSlot()
     def handleCueButton(self):
@@ -470,21 +474,22 @@ class myWindow(QtWidgets.QMainWindow):
                 selected_item = random.choice(range(n_list_items))
                 cue_basename = self.rightList.item(selected_item).text()
                 portcode = self.portcodes[cue_basename]
-                port_msg = "CUE+" + cue_basename
+                port_msg = "CuePlayed+" + cue_basename
                 self.send_to_pport(portcode, port_msg)
                 self.playables[cue_basename].play()
         else: # stop
             for k, v in self.playables.items():
                 if v.isPlaying():
                     v.stop()
-                    self.send_to_pport(1, "STOPPED")
+                    msg = "CueStopped"
+                    self.send_to_pport(self.portcodes[msg], msg)
 
     def handleNoteButton(self):
         text, ok = QtWidgets.QInputDialog.getText(self, "Text Input Dialog", "Custom note:")
         # self.subject_id.setValidator(QtGui.QIntValidator(0, 999)) # must be a 3-digit number
         if ok: # True of OK button was hit, False otherwise (cancel button)
             portcode = self.portcodes["Note"]
-            port_msg = "NOTE+" + text
+            port_msg = "Note+" + text
             self.send_to_pport(portcode, port_msg)
 
     @QtCore.pyqtSlot()
