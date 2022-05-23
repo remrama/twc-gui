@@ -6,7 +6,6 @@ import os
 import sys
 import time
 import json
-import serial
 import random
 import logging
 import warnings
@@ -120,7 +119,11 @@ class myWindow(QtWidgets.QMainWindow):
 
         self.init_logger()
 
-        self.pport_address = c.PORT_ADDRESS
+        self.biocals_order = ["Welcome", "OpenEyes", "CloseEyes", "LookLeft",
+            "LookRight", "LookUp", "LookDown", "BlinkEyes", "ClenchTeeth",
+            "InhaleExhale", "HoldBreath", "ExtendHands", "FlexFeet", "Thanks"]
+
+        self.pport_address = c.PORT_ADDRESS            
         self.portcodes = {
             "Note": 200,
             "DreamReport": 201,
@@ -129,9 +132,16 @@ class myWindow(QtWidgets.QMainWindow):
             "CueStopped": 204,
         }
 
-        self.soundfile_dir = c.SOUNDFILE_DIRECTORY
-        self.extract_cue_basenames()
-        self.preload_soundfiles()
+        for i, s in enumerate(self.biocals_order):
+            self.portcodes[f"biocals-{s}"] = max(list(self.portcodes.values())) + 1
+
+        self.cues_directory = c.CUES_DIRECTORY
+        self.noise_directory = c.NOISE_DIRECTORY
+        self.biocals_directory = c.BIOCALS_DIRECTORY
+
+        self.extract_cue_names()
+        self.preload_cues()
+        self.preload_biocals()
 
         self.init_recorder()
 
@@ -139,13 +149,9 @@ class myWindow(QtWidgets.QMainWindow):
 
         init_msg = f"Opened TWC interface v{c.VERSION}"
         self.log_info_msg(init_msg)
-        # # save the legend as its own file, in case things change later
-        # # (later it might make more sense to save version numbers and work from that)
-        # legend_out_fname = os.path.join(self.session_dir,
-        #     f"{self.subj_sess_ids}_legend.json")
-        # with open(legend_out_fname, "w", encoding="utf-8") as f:
-        #     json.dump(self.legend, f, indent=4, ensure_ascii=False)
-        # # self.log_info_msg(json.dumps(self.legend), print_in_gui=False)
+        # Save port code legend to the log file
+        portcode_legend_str = "Portcode legend: " + json.dumps(self.portcodes)
+        self.log_info_msg(portcode_legend_str)
 
         self.init_pport()
 
@@ -153,7 +159,7 @@ class myWindow(QtWidgets.QMainWindow):
         self.log_info_msg("ERROR")
         win = QtWidgets.QMessageBox()
         # win.setIcon(QtWidgets.QMessageBox.Critical)
-        win.setIconPixmap(QtGui.QPixmap("./img/exit.png"))
+        win.setIconPixmap(QtGui.QPixmap("./img/fish.ico"))
         win.setText(short_msg)
         if long_msg is not None:
             win.setInformativeText(long_msg)
@@ -195,20 +201,21 @@ class myWindow(QtWidgets.QMainWindow):
         """Wrapper to avoid rewriting if not None a bunch
         to make sure the msg also gets logged to output file and gui
         """
-        log_msg = f"{portcode}-{port_msg}"
+        log_msg = f"{port_msg} - Portcode {portcode}"
         if self.pport is not None:
             self.pport.setData(0)
             self.pport.setData(portcode)
+            log_msg += " sent"
         else:
-            log_msg = "!!!-" + log_msg
+            log_msg += " failed"
         self.log_info_msg(log_msg)
 
     def init_logger(self):
         """initialize logger that writes to a log file
         as well as the terminal, with independent levels if info
         """
-        log_name = f"{self.subj_sess_ids}_twc"
-        log_fname = os.path.join(self.session_dir, f"{log_name}.log")
+        log_name = f"{self.subj_sess_ids}"
+        log_fname = os.path.join(self.session_dir, f"{log_name}_tmr.log")
         self.logger = logging.getLogger(log_name)
         self.logger.setLevel(logging.DEBUG)
         # open file handler to save external file
@@ -385,10 +392,20 @@ class myWindow(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot()
     def on_cuePlayingChange(self):
-        """To uncheck the cue button if something stops on its own."""
-        if not self.sender().isPlaying():
-            self.cueButton.setChecked(False)
-
+        """To uncheck the cue button if something stops on its own.
+        and send port message of start/stop"""
+        current_volume = self.sender().volume()
+        filepath = self.sender().source().toString()
+        cue_name = os.path.basename(filepath).split(".")[0]
+        if self.sender().isPlaying():
+            portcode = self.portcodes[cue_name]
+            action = "played"
+        else:
+            self.cueButton.setChecked(False) # so it unchecks if player stops naturally
+            portcode = self.portcodes["CueStopped"]
+            action = "stopped"
+        port_msg = f"Cue {cue_name} {action} at {current_volume} volume" 
+        self.send_to_pport(portcode, port_msg)
 
 
     def recorder_state_change(self, state):
@@ -411,33 +428,67 @@ class myWindow(QtWidgets.QMainWindow):
         portcode = self.portcodes["DreamReport"]
         self.send_to_pport(portcode, port_msg)
 
-    def extract_cue_basenames(self):
-        self.cue_basename_list = []
-        for cue_basename in os.listdir(self.soundfile_dir):
-            if "-" in cue_basename and cue_basename.endswith(".wav"):
-                cue_name, portcode = cue_basename.split(".")[0].split("-")
-                if cue_name.isalpha() and portcode.isdigit():
-                    self.portcodes[cue_basename] = int(portcode)
-                    self.cue_basename_list.append(cue_basename)
+    def preload_biocals(self):
+        self.biocals_player = QtMultimedia.QMediaPlayer()
+        self.playlist = QtMultimedia.QMediaPlaylist(self.biocals_player)
+        self.playlist.setPlaybackMode(QtMultimedia.QMediaPlaylist.Sequential) #Sequential/CurrentItemOnce
+        for biocal_str in self.biocals_order:
+            biocal_path = os.path.join(self.biocals_directory, f"{biocal_str}.mp3")
+            url = QtCore.QUrl.fromLocalFile(biocal_path)
+            content = QtMultimedia.QMediaContent(url)
+            self.playlist.addMedia(content)
+        self.biocals_player.setPlaylist(self.playlist)
+        self.playlist.currentIndexChanged.connect(self.on_biocalsPlaylistIndexChange)
 
-    def preload_soundfiles(self):
+    def play_biocals(self):
+        self.biocals_player.setVolume(50) # 0-100 # 0 to 1
+        self.biocals_player.play()
+
+    @QtCore.pyqtSlot()
+    def on_biocalsPlaylistIndexChange(self):
+        current_index = self.sender().currentIndex()
+        if 0 < current_index < len(self.biocals_order)-1:
+            biocal_str = self.biocals_order[current_index]
+            portcode = self.portcodes[f"biocals-{biocal_str}"]
+            msg = f"Biocals {biocal_str}"
+            self.send_to_pport(portcode, msg)
+        else:
+            self.biocalsButton.setChecked(False)
+
+    def extract_cue_names(self):
+        self.cue_name_list = []
+        for cue_basename in os.listdir(self.cues_directory):
+            if cue_basename.endswith(".wav"):
+                assert cue_basename.count(".") == 1
+                cue_name = cue_basename.split(".")[0]
+                assert cue_name not in self.portcodes, "No duplicate cue names"
+                existing_portcodes = list(self.portcodes.values())
+                portcode = max(existing_portcodes) + 1
+                assert portcode < 245
+                self.portcodes[cue_name] = int(portcode)
+                self.cue_name_list.append(cue_name)
+
+    def preload_cues(self):
         self.playables = {}
-        for cue_basename in self.cue_basename_list:
-            cue_fullpath = os.path.join(self.soundfile_dir, cue_basename)
+        for cue_name in self.cue_name_list:
+            cue_basename = f"{cue_name}.wav"
+            cue_fullpath = os.path.join(self.cues_directory, cue_basename)
             content = QtCore.QUrl.fromLocalFile(cue_fullpath)
             player = QtMultimedia.QSoundEffect()
             player.setSource(content)
             player.setVolume(0) # 0 to 1
+            ### these might be easier to handle in a Qmediaplaylist and then indexing like track numbers
             # player.setLoopCount(1) # QtMultimedia.QSoundEffect.Infinite
             # Connect to a function that gets called when it starts or stops playing.
             # Only need it for the "stop" so it unchecks the cue button when not manually stopped.
             player.playingChanged.connect(self.on_cuePlayingChange)
-            self.playables[cue_basename] = player
+            self.playables[cue_name] = player
 
         # noise player
-        noise_basename = "pinknoise.wav"
-        noise_fullpath = os.path.join(self.soundfile_dir, noise_basename)
+        noise_basename = "pink.wav"
+        noise_fullpath = os.path.join(self.noise_directory, noise_basename)
         noise_content = QtCore.QUrl.fromLocalFile(noise_fullpath)
+        ## this should prob be a mediaplayer/playlist which uses less resources
         self.noisePlayer = QtMultimedia.QSoundEffect()
         self.noisePlayer.setSource(noise_content)
         self.noisePlayer.setVolume(0) # 0 to 1
@@ -458,6 +509,15 @@ class myWindow(QtWidgets.QMainWindow):
         self.send_to_pport(self.portcodes[msg], msg)
 
     @QtCore.pyqtSlot()
+    def handleBiocalsButton(self):
+        ## couldnt these use "sender"?
+        if self.biocalsButton.isChecked():
+            self.play_biocals()
+        else: # not checked
+            self.biocals_player.stop()
+            self.playlist.setCurrentIndex(0)
+
+    @QtCore.pyqtSlot()
     def handleCueButton(self):
         if self.cueButton.isChecked():
             # #### play selected item
@@ -472,24 +532,19 @@ class myWindow(QtWidgets.QMainWindow):
             n_list_items = self.rightList.count()
             if n_list_items > 0:
                 selected_item = random.choice(range(n_list_items))
-                cue_basename = self.rightList.item(selected_item).text()
-                portcode = self.portcodes[cue_basename]
-                port_msg = "CuePlayed+" + cue_basename
-                self.send_to_pport(portcode, port_msg)
-                self.playables[cue_basename].play()
+                cue_name = self.rightList.item(selected_item).text()
+                self.playables[cue_name].play()
         else: # stop
             for k, v in self.playables.items():
                 if v.isPlaying():
                     v.stop()
-                    msg = "CueStopped"
-                    self.send_to_pport(self.portcodes[msg], msg)
 
     def handleNoteButton(self):
         text, ok = QtWidgets.QInputDialog.getText(self, "Text Input Dialog", "Custom note:")
         # self.subject_id.setValidator(QtGui.QIntValidator(0, 999)) # must be a 3-digit number
         if ok: # True of OK button was hit, False otherwise (cancel button)
             portcode = self.portcodes["Note"]
-            port_msg = "Note+" + text
+            port_msg = f"Note [{text}]"
             self.send_to_pport(portcode, port_msg)
 
     @QtCore.pyqtSlot()
@@ -545,7 +600,7 @@ class myWindow(QtWidgets.QMainWindow):
 
         ############ create buttons ################
 
-        leftListHeader = QtWidgets.QLabel("Bank", self)
+        leftListHeader = QtWidgets.QLabel("Cue Bank", self)
         leftListHeader.setAlignment(QtCore.Qt.AlignCenter)
         # leftListHeader.setStyleSheet("border: 1px solid red;") #changed
 
@@ -568,6 +623,12 @@ class myWindow(QtWidgets.QMainWindow):
         self.noiseButton.setCheckable(True)
         self.noiseButton.clicked.connect(self.handleNoiseButton)
 
+        self.biocalsButton = QtWidgets.QPushButton("Biocals", self)
+        self.biocalsButton.setStatusTip("Start biocals.")
+        self.biocalsButton.setShortcut("Ctrl+B")
+        self.biocalsButton.setCheckable(True)
+        self.biocalsButton.clicked.connect(self.handleBiocalsButton)
+
         self.left2rightButton = QtWidgets.QPushButton(">", self)
         self.right2leftButton = QtWidgets.QPushButton("<", self)
         self.left2rightButton.setStatusTip("Move selected item from left to right.")
@@ -583,7 +644,7 @@ class myWindow(QtWidgets.QMainWindow):
         cueSelectionLayout.addWidget(self.left2rightButton, 2, 2, 1, 1)
         cueSelectionLayout.addWidget(self.right2leftButton, 3, 2, 1, 1)
         # cueSelectionLayout.addWidget(self.cueButton, 5, 3, 1, 2)
-        for c in self.cue_basename_list:
+        for c in self.cue_name_list:
             self.leftList.addItem(c)
 
         # # all cue buttons are similar so can be created simultaneously
@@ -608,6 +669,7 @@ class myWindow(QtWidgets.QMainWindow):
         buttonsLayout.addWidget(dreamReportButton)
         buttonsLayout.addWidget(noteButton)
         buttonsLayout.addWidget(self.noiseButton)
+        buttonsLayout.addWidget(self.biocalsButton)
 
 
         logViewer_header = QtWidgets.QLabel("Event log", self)
@@ -741,12 +803,10 @@ class myWindow(QtWidgets.QMainWindow):
     def changeOutputCueVolume(self, value):
         # pyqt sliders only take integers but range is 0-1
         # self.volume = value / 100
-        float_volume = value / 100
+        float_volume = round(value / 100, 1)
         for player in self.playables.values():
             player.setVolume(float_volume)
         # self.createData()
-        if value % 10 == 0: # for now to avoid overlogging
-            self.log_info_msg(f"Set cue volume: {value:d}")
 
     def changeOutputNoiseVolume(self, value):
         # pyqt sliders only take integers but range is 0-1
