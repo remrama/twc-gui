@@ -18,18 +18,16 @@ from psychopy import parallel
 from PyQt5 import QtWidgets, QtGui, QtCore, QtMultimedia
 
 
-import config as c
-
-with open("./config.json", encoding="utf-8", "r") as fp:
+with open("./config.json", "r", encoding="utf-8") as fp:
     C = json.load(fp)
 
-stimulus_directory = C["stimulus_directory"]
-if not os.path.isdir(stimulus_directory):
-    raise ValueError("Stimulus directory not found!\nCheck config.json file.\nFiles available at https://osf.io/6p2mc/files/")
+stimuli_directory = C["stimuli_directory"]
+if not os.path.isdir(stimuli_directory):
+    raise ValueError("Stimuli directory not found!\nCheck config.json file.\nFiles available at https://osf.io/6p2mc/files/")
 
-cues_directory = os.path.join(stimulus_directory, "cues")
-noise_directory = os.path.join(stimulus_directory, "noise")
-biocals_directory = os.path.join(stimulus_directory, "biocals")
+cues_directory = os.path.join(stimuli_directory, "cues")
+noise_directory = os.path.join(stimuli_directory, "noise")
+biocals_directory = os.path.join(stimuli_directory, "biocals")
 
 # def load_button_legend():
 #     with open("./button_legend.json", "r") as f:
@@ -163,7 +161,7 @@ class myWindow(QtWidgets.QMainWindow):
 
         self.initUI()
 
-        init_msg = f"Opened TWC interface v{C["version"]}"
+        init_msg = "Opened TWC interface v" + C["version"]
         self.log_info_msg(init_msg)
         # Save port code legend to the log file
         portcode_legend_str = "Portcode legend: " + json.dumps(self.portcodes)
@@ -492,7 +490,7 @@ class myWindow(QtWidgets.QMainWindow):
             content = QtCore.QUrl.fromLocalFile(cue_fullpath)
             player = QtMultimedia.QSoundEffect()
             player.setSource(content)
-            player.setVolume(0) # 0 to 1
+            player.setVolume(C["default_volume"]) # 0 to 1
             ### these might be easier to handle in a Qmediaplaylist and then indexing like track numbers
             # player.setLoopCount(1) # QtMultimedia.QSoundEffect.Infinite
             # Connect to a function that gets called when it starts or stops playing.
@@ -507,7 +505,7 @@ class myWindow(QtWidgets.QMainWindow):
         ## this should prob be a mediaplayer/playlist which uses less resources
         self.noisePlayer = QtMultimedia.QSoundEffect()
         self.noisePlayer.setSource(noise_content)
-        self.noisePlayer.setVolume(0) # 0 to 1
+        self.noisePlayer.setVolume(C["default_volume"]) # 0 to 1
         self.noisePlayer.setLoopCount(QtMultimedia.QSoundEffect.Infinite)
         # Connect to a function that gets called when it starts or stops playing.
         # Only need it for the "stop" so it unchecks the cue button when not manually stopped.
@@ -747,33 +745,71 @@ class myWindow(QtWidgets.QMainWindow):
         # io_layout.addWidget(io_header, 0, 0, 1, 2)
         io_layout.addWidget(io_header)
 
-        # add row of headers
-        header_layout = QtWidgets.QHBoxLayout()
-        for label in ["Output Cue\nVolume", "Output Noise\nVolume", "Input\nGain", "Input\nVisualization"]:
-            header_layout.addWidget(QtWidgets.QLabel(label, self))
-        io_layout.addLayout(header_layout)
+        # # add row of headers
+        # header_layout = QtWidgets.QHBoxLayout()
+        # for label in ["Output Cue\nVolume", "Output Noise\nVolume", "Input\nGain", "Input\nVisualization"]:
+        #     header_layout.addWidget(QtWidgets.QLabel(label, self))
+        # io_layout.addLayout(header_layout)
 
-        controls_layout = QtWidgets.QHBoxLayout()
         # create 2 sliders, 1 for output volume another for input gain
         # create volume slider and add to this i/o layout
         # volume slider stuff
-        cueVolumeSlider = QtWidgets.QSlider(QtCore.Qt.Vertical)
-        noiseVolumeSlider = QtWidgets.QSlider(QtCore.Qt.Vertical)
+        # cueVolumeSlider = QtWidgets.QSlider(QtCore.Qt.Vertical)
+        buttonsLayout = QtWidgets.QVBoxLayout()
+
         ## sliders can only have integer values
         ## so have to use 0-100 and then divide when setting it later
-        cueVolumeSlider.setMinimum(0)
-        cueVolumeSlider.setMaximum(100)
-        cueVolumeSlider.setSingleStep(1)
-        cueVolumeSlider.setValue(0)
-        # volumeSlider.setTickInterval(10)
-        noiseVolumeSlider.setMinimum(0)
-        noiseVolumeSlider.setMaximum(100)
-        noiseVolumeSlider.setSingleStep(1)
-        noiseVolumeSlider.setValue(0)
-        cueVolumeSlider.valueChanged.connect(self.changeOutputCueVolume)
-        noiseVolumeSlider.valueChanged.connect(self.changeOutputNoiseVolume)
-        controls_layout.addWidget(cueVolumeSlider)
-        controls_layout.addWidget(noiseVolumeSlider)
+        default_vol_upscaled = int(100 * C["default_volume"])
+
+        # Cue Volume Knob Layout
+        cueVolumeKnob = QtWidgets.QDial()
+        cueVolumeKnob.setMinimum(0)
+        cueVolumeKnob.setMaximum(100)
+        cueVolumeKnob.setSingleStep(1)
+        cueVolumeKnob.setValue(default_vol_upscaled)
+        cueVolumeKnob.setNotchesVisible(True)
+        cueVolumeKnob.setWrapping(False)
+        cueVolumeKnob.valueChanged.connect(self.changeOutputCueVolume)
+        cueVolumeLabel = QtWidgets.QLabel("Cue Volume", self)
+        cueVolumeLabel.setAlignment(QtCore.Qt.AlignCenter)
+        cueVolumeLayout = QtWidgets.QVBoxLayout()
+        cueVolumeLayout.addWidget(cueVolumeLabel)
+        cueVolumeLayout.addWidget(cueVolumeKnob)
+
+        # Noise Volume Knob Layout
+        noiseVolumeKnob = QtWidgets.QDial()
+        noiseVolumeKnob.setMinimum(0)
+        noiseVolumeKnob.setMaximum(100)
+        noiseVolumeKnob.setSingleStep(1)
+        noiseVolumeKnob.setValue(default_vol_upscaled)
+        noiseVolumeKnob.setNotchesVisible(True)
+        noiseVolumeKnob.setWrapping(False)
+        noiseVolumeKnob.valueChanged.connect(self.changeOutputNoiseVolume)
+        noiseVolumeLabel = QtWidgets.QLabel("Noise Volume", self)
+        noiseVolumeLabel.setAlignment(QtCore.Qt.AlignCenter)
+        noiseVolumeLayout = QtWidgets.QVBoxLayout()
+        noiseVolumeLayout.addWidget(noiseVolumeLabel)
+        noiseVolumeLayout.addWidget(noiseVolumeKnob)
+
+        # Biocals Volume Knob Layout
+        biocalsVolumeKnob = QtWidgets.QDial()
+        biocalsVolumeKnob.setMinimum(0)
+        biocalsVolumeKnob.setMaximum(100)
+        biocalsVolumeKnob.setSingleStep(1)
+        biocalsVolumeKnob.setValue(default_vol_upscaled)
+        biocalsVolumeKnob.setNotchesVisible(True)
+        biocalsVolumeKnob.setWrapping(False)
+        biocalsVolumeKnob.valueChanged.connect(self.changeOutputBiocalsVolume)
+        biocalsVolumeLabel = QtWidgets.QLabel("Biocals Volume", self)
+        biocalsVolumeLabel.setAlignment(QtCore.Qt.AlignCenter)
+        biocalsVolumeLayout = QtWidgets.QVBoxLayout()
+        biocalsVolumeLayout.addWidget(biocalsVolumeLabel)
+        biocalsVolumeLayout.addWidget(biocalsVolumeKnob)
+
+        volumeKnobsLayout = QtWidgets.QHBoxLayout()
+        volumeKnobsLayout.addLayout(cueVolumeLayout)
+        volumeKnobsLayout.addLayout(noiseVolumeLayout)
+        volumeKnobsLayout.addLayout(biocalsVolumeLayout)
         # formLayout = QtWidgets.QFormLayout()
         # formLayout.addRow(self.tr("&Volume:"), volumeSlider)
         # io_layout.addLayout(formLayout, 1, 0, 1, 2)
@@ -781,15 +817,13 @@ class myWindow(QtWidgets.QMainWindow):
         # horizontalLayout.addLayout(formLayout)
         # horizontalLayout.addLayout(buttonLayout)
 
-        gainSlider = QtWidgets.QSlider(QtCore.Qt.Vertical)
-        gainSlider.valueChanged.connect(self.changeInputGain)
-        controls_layout.addWidget(gainSlider)
+        # gainSlider = QtWidgets.QSlider(QtCore.Qt.Vertical)
+        # gainSlider.valueChanged.connect(self.changeInputGain)
+        # volumeKnobsLayout.addWidget(gainSlider)
 
-        ## add a blank widget placeholder for the visualization for now
-        input_vis_widget = QtWidgets.QWidget()
-        controls_layout.addWidget(input_vis_widget)
-
-        io_layout.addLayout(controls_layout)
+        # ## add a blank widget placeholder for the visualization for now
+        # input_vis_widget = QtWidgets.QWidget()
+        # volumeKnobsLayout.addWidget(input_vis_widget)
 
 
         # this main/larger layout holds all the subwidgets and in some cases other layouts
@@ -798,7 +832,7 @@ class myWindow(QtWidgets.QMainWindow):
         main_layout.addLayout(cueSelectionLayout, 0, 0, 2, 2)
         main_layout.addLayout(extra_layout, 3, 0, 1, 2)
         main_layout.addLayout(viewer_layout, 0, 2, 2, 1)
-        main_layout.addLayout(io_layout, 2, 2, 2, 1)
+        main_layout.addLayout(volumeKnobsLayout, 2, 2, 2, 1)
         # main_layout.setContentsMargins(20, 20, 20, 20)
         # main_layout.setSpacing(20)
         # main_layout.addWidget(border_widget, 0, 0, 3, 2)
@@ -816,10 +850,14 @@ class myWindow(QtWidgets.QMainWindow):
         self.main_layout = main_layout
         # self.resize(300, 300)
 
-    def changeOutputCueVolume(self, value):
+    def _volume_rescaler(self, zero_to_hundred):
         # pyqt sliders only take integers but range is 0-1
+        float_volume = round(zero_to_hundred / 100, 1)
+        return float_volume
+
+    def changeOutputCueVolume(self, value):
         # self.volume = value / 100
-        float_volume = round(value / 100, 1)
+        float_volume = self._volume_rescaler(value)
         for player in self.playables.values():
             player.setVolume(float_volume)
         # self.createData()
@@ -827,10 +865,16 @@ class myWindow(QtWidgets.QMainWindow):
     def changeOutputNoiseVolume(self, value):
         # pyqt sliders only take integers but range is 0-1
         # self.volume = value / 100
-        float_volume = value / 100
+        float_volume = self._volume_rescaler(value)
         self.noisePlayer.setVolume(float_volume)
         if value % 10 == 0: # for now to avoid overlogging
             self.log_info_msg(f"Set noise volume: {value:d}")
+        # self.createData()
+
+    def changeOutputBiocalsVolume(self, value):
+        # self.volume = value / 100
+        # float_volume = self._volume_rescaler(value)
+        self.biocals_player.setVolume(value)
         # self.createData()
 
     def changeInputGain(self, value):
@@ -869,7 +913,6 @@ class myWindow(QtWidgets.QMainWindow):
         # engine.setProperty("volume", 1) # default 1 (range 0-1)
         # voices = engine.getProperty('voices')       #getting details of current voice
         # # engine.setProperty('voice', voices[0].id)  #changing index, changes voices. o for male
-
 
         # make a list of all phrases that will be said
         PHRASES = [

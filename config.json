@@ -8,8 +8,10 @@
 
     "default_data_directory": "../",
 
-    "stimulus_directory": "../soundfiles/gui-sounds",
+    "default_volume": 0.5,
 
-    "port_address": "0x3FD8",
+    "stimuli_directory": "./stimuli",
+
+    "pport_address": "0x3FD8"
 
 }
