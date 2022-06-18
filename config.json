@@ -1,0 +1,15 @@
+{
+
+    "version": "0.0",
+    "about_string": "Two-Way Communication Interface\ngithub.com/remrama/twc-gui",
+
+    "dev_subject_id": 999,
+    "dev_session_id": 999,
+
+    "default_data_directory": "../",
+
+    "stimulus_directory": "../soundfiles/gui-sounds",
+
+    "port_address": "0x3FD8",
+
+}

@@ -13,11 +13,23 @@ import warnings
 from psychopy import parallel
 # import sounddevice as sd
 
-import config as c
-
 # import pyttsx3 # text2speech
 
 from PyQt5 import QtWidgets, QtGui, QtCore, QtMultimedia
+
+
+import config as c
+
+with open("./config.json", encoding="utf-8", "r") as fp:
+    C = json.load(fp)
+
+stimulus_directory = C["stimulus_directory"]
+if not os.path.isdir(stimulus_directory):
+    raise ValueError("Stimulus directory not found!\nCheck config.json file.\nFiles available at https://osf.io/6p2mc/files/")
+
+cues_directory = os.path.join(stimulus_directory, "cues")
+noise_directory = os.path.join(stimulus_directory, "noise")
+biocals_directory = os.path.join(stimulus_directory, "biocals")
 
 # def load_button_legend():
 #     with open("./button_legend.json", "r") as f:
@@ -48,8 +60,8 @@ class InputDialog(QtWidgets.QDialog):
 
         self.subject_id = QtWidgets.QLineEdit(self)
         self.session_id = QtWidgets.QLineEdit(self)
-        self.subject_id.setText(str(c.DEV_SUBJECT_ID))
-        self.session_id.setText(str(c.DEV_SESSION_ID))
+        self.subject_id.setText(str(C["dev_subject_id"]))
+        self.session_id.setText(str(C["dev_session_id"]))
         self.subject_id.setValidator(QtGui.QIntValidator(0, 999)) # must be a 3-digit number
         self.session_id.setValidator(QtGui.QIntValidator(0, 999))
 
@@ -78,7 +90,8 @@ def showAboutPopup():
     win.setIcon(QtWidgets.QMessageBox.Information)
     win.setStandardButtons(QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Close)
     win.setDefaultButton(QtWidgets.QMessageBox.Close)
-    win.setInformativeText(c.ABOUT_STRING)
+    informative_text = C["about_string"] + "\nVersion: " + C["version"]
+    win.setInformativeText(informative_text)
     # win.setDetailedText("detailshere")
     # win.setStyleSheet("QLabel{min-width:500 px; font-size: 24px;} QPushButton{ width:250px; font-size: 18px; }");
     # win.setGeometry(200, 150, 100, 40)
@@ -107,37 +120,40 @@ class myWindow(QtWidgets.QMainWindow):
         # select directory for save location
         data_dir = QtWidgets.QFileDialog.getExistingDirectory(self,
             "Select data directory to place new subject directory",
-            c.DEFAULT_DATA_DIRECTORY,
+            C["default_data_directory"],
             QtWidgets.QFileDialog.ShowDirsOnly)
         if not data_dir:
             sys.exit() # if the directory view is cancelled/exited
         else:
             # make sure the export dir doesn't exist and make it if it doesn't
             self.session_dir = os.path.join(data_dir, sub_id_str, ses_id_str)
-            exist_ok = (subject_id==c.DEV_SUBJECT_ID and session_id==c.DEV_SESSION_ID)
+            exist_ok = (subject_id==C["dev_subject_id"] and session_id==C["dev_session_id"])
             os.makedirs(self.session_dir, exist_ok=exist_ok)
 
         self.init_logger()
 
         self.biocals_order = ["Welcome", "OpenEyes", "CloseEyes", "LookLeft",
             "LookRight", "LookUp", "LookDown", "BlinkEyes", "ClenchTeeth",
-            "InhaleExhale", "HoldBreath", "ExtendHands", "FlexFeet", "Thanks"]
+            "InhaleExhale", "HoldBreath", "ExtendHands", "FlexFeet",
+            "LucidIntro", "LucidSignalOpen", "LucidSignalClosed", "Thanks"]
 
-        self.pport_address = c.PORT_ADDRESS            
+        self.pport_address = C["pport_address"]            
         self.portcodes = {
             "Note": 200,
             "DreamReport": 201,
             "NoiseStarted": 202,
             "NoiseStopped": 203,
             "CueStopped": 204,
+            "LightsOn": 205,
+            "LightsOff": 206,
         }
 
         for i, s in enumerate(self.biocals_order):
             self.portcodes[f"biocals-{s}"] = max(list(self.portcodes.values())) + 1
 
-        self.cues_directory = c.CUES_DIRECTORY
-        self.noise_directory = c.NOISE_DIRECTORY
-        self.biocals_directory = c.BIOCALS_DIRECTORY
+        self.cues_directory = cues_directory
+        self.noise_directory = noise_directory
+        self.biocals_directory = biocals_directory
 
         self.extract_cue_names()
         self.preload_cues()
@@ -147,7 +163,7 @@ class myWindow(QtWidgets.QMainWindow):
 
         self.initUI()
 
-        init_msg = f"Opened TWC interface v{c.VERSION}"
+        init_msg = f"Opened TWC interface v{C["version"]}"
         self.log_info_msg(init_msg)
         # Save port code legend to the log file
         portcode_legend_str = "Portcode legend: " + json.dumps(self.portcodes)
