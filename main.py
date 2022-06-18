@@ -459,6 +459,16 @@ class myWindow(QtWidgets.QMainWindow):
         portcode = self.portcodes["DreamReport"]
         self.send_to_pport(portcode, port_msg)
 
+    def handleLightSwitch(self):
+        # button_label = self.sender().text()
+        if self.sender().isChecked():
+            port_msg = "LightsOn"
+        else:
+            port_msg = "LightsOff"
+        portcode = self.portcodes[port_msg]
+        self.send_to_pport(portcode, port_msg)
+
+
     def preload_biocals(self):
         self.biocals_player = QtMultimedia.QMediaPlayer()
         self.playlist = QtMultimedia.QMediaPlaylist(self.biocals_player)
@@ -684,7 +694,7 @@ class myWindow(QtWidgets.QMainWindow):
         #     if k not in ["Dream report", "Note"]:
         #         self.buttons[k] = self.generate_cue_button(k)
 
-        dreamReportButton = QtWidgets.QPushButton("Dream report", self)
+        dreamReportButton = QtWidgets.QPushButton("Record dream report", self)
         dreamReportButton.setStatusTip("Ask for a dream report and start recording.")
         dreamReportButton.setCheckable(True)
         dreamReportButton.clicked.connect(self.handleDreamReportButton)
@@ -693,14 +703,20 @@ class myWindow(QtWidgets.QMainWindow):
         noteButton.setStatusTip("Open a text box and timestamp a note.")
         noteButton.clicked.connect(self.handleNoteButton)
 
+        lightSwitch = QtWidgets.QPushButton("Lights Off", self)
+        lightSwitch.setStatusTip("Switch lights off or back on.")
+        lightSwitch.setCheckable(True)
+        lightSwitch.clicked.connect(self.handleLightSwitch)
+
         buttonsLayout = QtWidgets.QVBoxLayout()
         # buttonsLayout.setMargin(20)
         buttonsLayout.setAlignment(QtCore.Qt.AlignCenter)
         # buttonsLayout.setFixedSize(12, 12)
-        buttonsLayout.addWidget(dreamReportButton)
-        buttonsLayout.addWidget(noteButton)
         buttonsLayout.addWidget(self.noiseButton)
         buttonsLayout.addWidget(self.biocalsButton)
+        buttonsLayout.addWidget(lightSwitch)
+        buttonsLayout.addWidget(dreamReportButton)
+        buttonsLayout.addWidget(noteButton)
 
 
         logViewer_header = QtWidgets.QLabel("Event log", self)
