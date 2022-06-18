@@ -25,6 +25,9 @@ stimuli_directory = C["stimuli_directory"]
 if not os.path.isdir(stimuli_directory):
     raise ValueError("Stimuli directory not found!\nCheck config.json file.\nFiles available at https://osf.io/6p2mc/files/")
 
+if not os.path.isdir(C["data_directory"]):
+    raise ValueError("Data directory not found!\nCheck config.json file.\nFiles available at https://osf.io/6p2mc/files/")
+
 cues_directory = os.path.join(stimuli_directory, "cues")
 noise_directory = os.path.join(stimuli_directory, "noise")
 biocals_directory = os.path.join(stimuli_directory, "biocals")
@@ -118,7 +121,7 @@ class myWindow(QtWidgets.QMainWindow):
         # select directory for save location
         data_dir = QtWidgets.QFileDialog.getExistingDirectory(self,
             "Select data directory to place new subject directory",
-            C["default_data_directory"],
+            C["data_directory"],
             QtWidgets.QFileDialog.ShowDirsOnly)
         if not data_dir:
             sys.exit() # if the directory view is cancelled/exited
@@ -737,13 +740,13 @@ class myWindow(QtWidgets.QMainWindow):
         extra_layout = QtWidgets.QGridLayout()
         extra_layout.addLayout(buttonsLayout, 0, 0, 1, 1)
 
-        ## layout for the audio i/o monitoring
-        # io_layout = QtWidgets.QGridLayout()
-        io_layout = QtWidgets.QVBoxLayout()
-        io_header = QtWidgets.QLabel("Audio I/O", self)
-        io_header.setAlignment(QtCore.Qt.AlignCenter)
-        # io_layout.addWidget(io_header, 0, 0, 1, 2)
-        io_layout.addWidget(io_header)
+        # ## layout for the audio i/o monitoring
+        # # io_layout = QtWidgets.QGridLayout()
+        # io_layout = QtWidgets.QVBoxLayout()
+        # io_header = QtWidgets.QLabel("Audio I/O", self)
+        # io_header.setAlignment(QtCore.Qt.AlignCenter)
+        # # io_layout.addWidget(io_header, 0, 0, 1, 2)
+        # io_layout.addWidget(io_header)
 
         # # add row of headers
         # header_layout = QtWidgets.QHBoxLayout()

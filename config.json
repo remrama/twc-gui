@@ -6,7 +6,7 @@
     "dev_subject_id": 999,
     "dev_session_id": 999,
 
-    "default_data_directory": "../",
+    "data_directory": "./data",
 
     "default_volume": 0.5,
 
