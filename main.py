@@ -285,13 +285,27 @@ class myWindow(QtWidgets.QMainWindow):
         # outputMenu = audioMenu.addMenu(QtGui.QIcon("./img/output.png"), "&Output device")
 
         input_devices = self.recorder.audioInputs()
+        # don't know y each device shows up twice
+        input_devices = list(set(input_devices))
+        # print(self.recorder.defaultAudioInput())
+        # print(QtMultimedia.QtMultimediaControl.QAudioInputSelectorControl.defaultInput())
+        # print(input_devices)
+        # print(self.recorder.audioInput())
+        # print(self.recorder.audioInputDescription("Default Input Device"))
+        # print(QtMultimedia.QAudioRecorder())
+        # devices = QtMultimedia.QAudioDeviceInfo.availableDevices(QtMultimedia.QAudio.AudioInput)
+        # for d in devices:
+        #     print(d.deviceName())
+        # print(QtMultimedia.QAudioDeviceInfo.availableDevices(QtMultimedia.QAudio.AudioInput))
+        # print(QtMultimedia.QAudioDeviceInfo.availableDevices(QtMultimedia.QAudio.AudioOutput))
         # save the action items to change the checkmarks later
         self.input_menu_items = []
-        for dev in input_devices:
-            action = QtWidgets.QAction(dev, self)
-            action.setStatusTip(f"Set {dev} as input device")
+        for device in input_devices:
+            action = QtWidgets.QAction(device, self)
+            action.setStatusTip(f"Set {device} as input device")
             action.setCheckable(True)
-            if dev == self.recorder.audioInput():
+            # if device == self.recorder.defaultAudioInput():
+            if device == self.recorder.audioInput(): # doesn't work :/
                 action.setChecked(True)
             action.triggered.connect(self.update_input_device)
             inputMenu.addAction(action)
