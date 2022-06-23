@@ -116,7 +116,7 @@ class myWindow(QtWidgets.QMainWindow):
         # build a stringy-thing that will be used for lots of filenames
         sub_id_str = f"sub-{subject_id:03d}"
         ses_id_str = f"ses-{session_id:03d}"
-        self.subj_sess_ids = f"{sub_id_str}-{ses_id_str}"
+        self.subj_sess_ids = f"{sub_id_str}_{ses_id_str}"
 
         # select directory for save location
         data_dir = QtWidgets.QFileDialog.getExistingDirectory(self,
@@ -166,9 +166,9 @@ class myWindow(QtWidgets.QMainWindow):
 
         init_msg = "Opened TWC interface v" + C["version"]
         self.log_info_msg(init_msg)
-        # Save port code legend to the log file
-        portcode_legend_str = "Portcode legend: " + json.dumps(self.portcodes)
-        self.log_info_msg(portcode_legend_str)
+        # # Save port code legend to the log file
+        # portcode_legend_str = "Portcode legend: " + json.dumps(self.portcodes)
+        # self.log_info_msg(portcode_legend_str)
 
         self.init_pport()
 
@@ -208,7 +208,7 @@ class myWindow(QtWidgets.QMainWindow):
         try:
             self.pport = parallel.ParallelPort(address=self.pport_address)
             self.pport.setData(0) # clear all pins out to prep for sending
-            msg = "Parallel port successfully connected."
+            msg = "Parallel port connected."
         except:
             self.pport = None
             msg = "Parallel port connection failed."
@@ -218,13 +218,13 @@ class myWindow(QtWidgets.QMainWindow):
         """Wrapper to avoid rewriting if not None a bunch
         to make sure the msg also gets logged to output file and gui
         """
-        log_msg = f"{port_msg} - Portcode {portcode}"
         if self.pport is not None:
             self.pport.setData(0)
             self.pport.setData(portcode)
-            log_msg += " sent"
+            success = "Sent"
         else:
-            log_msg += " failed"
+            success = "Failed"
+        log_msg = f"{port_msg} - {success} portcode {portcode}"
         self.log_info_msg(log_msg)
 
     def init_logger(self):
@@ -243,7 +243,7 @@ class myWindow(QtWidgets.QMainWindow):
         ch.setLevel(logging.DEBUG) # this determines what gets printed to console
         # create formatter and add it to the handlers
         formatter = logging.Formatter(
-            fmt="%(asctime)s.%(msecs)03d - %(name)s - %(levelname)s - %(message)s",
+            fmt="%(asctime)s.%(msecs)03d, %(levelname)s, %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S")
         fh.setFormatter(formatter)
         ch.setFormatter(formatter)
@@ -430,12 +430,12 @@ class myWindow(QtWidgets.QMainWindow):
         cue_name = os.path.basename(filepath).split(".")[0]
         if self.sender().isPlaying():
             portcode = self.portcodes[cue_name]
-            action = "played"
+            action = "Played"
         else:
             self.cueButton.setChecked(False) # so it unchecks if player stops naturally
             portcode = self.portcodes["CueStopped"]
-            action = "stopped"
-        port_msg = f"Cue {cue_name} {action} at {current_volume} volume" 
+            action = "Stopped"
+        port_msg = f"{action} cue {cue_name} - Volume {current_volume}" 
         self.send_to_pport(portcode, port_msg)
 
 
@@ -448,11 +448,11 @@ class myWindow(QtWidgets.QMainWindow):
     def handleDreamReportButton(self):
         self.record() # i think this function handles the start/stop decision
         if self.sender().isChecked():
-            port_msg = "DreamReport+start"
+            port_msg = "StartedDreamReport"
             # self.logViewer.setStyleSheet("border: 3px solid red;")
             # self.sender().setStyleSheet("background-color : lightgrey")
         else:
-            port_msg = "DreamReport+stop"
+            port_msg = "StoppedDreamReport"
             # self.logViewer.setStyleSheet("border: 0px solid red;")
             # self.sender().setStyleSheet("background-color : lightblue")
         button_label = self.sender().text()
@@ -581,7 +581,7 @@ class myWindow(QtWidgets.QMainWindow):
                     v.stop()
 
     def handleNoteButton(self):
-        text, ok = QtWidgets.QInputDialog.getText(self, "Text Input Dialog", "Custom note:")
+        text, ok = QtWidgets.QInputDialog.getText(self, "Text Input Dialog", "Custom note (no commas):")
         # self.subject_id.setValidator(QtGui.QIntValidator(0, 999)) # must be a 3-digit number
         if ok: # True of OK button was hit, False otherwise (cancel button)
             portcode = self.portcodes["Note"]
