@@ -140,13 +140,15 @@ class myWindow(QtWidgets.QMainWindow):
 
         self.pport_address = C["pport_address"]            
         self.portcodes = {
-            "Note": 200,
-            "DreamReport": 201,
-            "NoiseStarted": 202,
-            "NoiseStopped": 203,
-            "CueStopped": 204,
-            "LightsOn": 205,
-            "LightsOff": 206,
+            "TriggerInitialization": 200,
+            "Note": 201,
+            "LightsOff": 202,
+            "LightsOn": 203,
+            "DreamReportStarted": 204,
+            "DreamReportStopped": 205,
+            "NoiseStarted": 206,
+            "NoiseStopped": 207,
+            "CueStopped": 208,
         }
 
         for i, s in enumerate(self.biocals_order):
@@ -208,11 +210,13 @@ class myWindow(QtWidgets.QMainWindow):
         try:
             self.pport = parallel.ParallelPort(address=self.pport_address)
             self.pport.setData(0) # clear all pins out to prep for sending
-            msg = "Parallel port connected."
+            msg = "Parallel port connection succeeded."
         except:
             self.pport = None
             msg = "Parallel port connection failed."
-        self.log_info_msg(msg)
+        portcode = self.portcodes["TriggerInitialization"]
+        self.send_to_pport(portcode, msg)
+
 
     def send_to_pport(self, portcode, port_msg):
         """Wrapper to avoid rewriting if not None a bunch
@@ -224,6 +228,7 @@ class myWindow(QtWidgets.QMainWindow):
             success = "Sent"
         else:
             success = "Failed"
+            ### Consider re-trying to connect here
         log_msg = f"{port_msg} - {success} portcode {portcode}"
         self.log_info_msg(log_msg)
 
@@ -352,6 +357,7 @@ class myWindow(QtWidgets.QMainWindow):
         self.setWindowTitle("TWC Interface")
         self.setWindowIcon(QtGui.QIcon("./img/fish.ico"))
         # self.setGeometry(100, 100, 600, 400)
+        self.resize(1200, 500)
         self.show()
 
 
@@ -430,12 +436,12 @@ class myWindow(QtWidgets.QMainWindow):
         cue_name = os.path.basename(filepath).split(".")[0]
         if self.sender().isPlaying():
             portcode = self.portcodes[cue_name]
-            action = "Played"
+            action = "Started"
         else:
             self.cueButton.setChecked(False) # so it unchecks if player stops naturally
             portcode = self.portcodes["CueStopped"]
             action = "Stopped"
-        port_msg = f"{action} cue {cue_name} - Volume {current_volume}" 
+        port_msg = f"Cue{action}-{cue_name} - Volume {current_volume}" 
         self.send_to_pport(portcode, port_msg)
 
 
@@ -448,23 +454,23 @@ class myWindow(QtWidgets.QMainWindow):
     def handleDreamReportButton(self):
         self.record() # i think this function handles the start/stop decision
         if self.sender().isChecked():
-            port_msg = "StartedDreamReport"
+            port_msg = "DreamReportStarted"
             # self.logViewer.setStyleSheet("border: 3px solid red;")
             # self.sender().setStyleSheet("background-color : lightgrey")
         else:
-            port_msg = "StoppedDreamReport"
+            port_msg = "DreamReportStopped"
             # self.logViewer.setStyleSheet("border: 0px solid red;")
             # self.sender().setStyleSheet("background-color : lightblue")
-        button_label = self.sender().text()
-        portcode = self.portcodes["DreamReport"]
+        # button_label = self.sender().text()
+        portcode = self.portcodes[port_msg]
         self.send_to_pport(portcode, port_msg)
 
     def handleLightSwitch(self):
         # button_label = self.sender().text()
         if self.sender().isChecked():
-            port_msg = "LightsOn"
-        else:
             port_msg = "LightsOff"
+        else:
+            port_msg = "LightsOn"
         portcode = self.portcodes[port_msg]
         self.send_to_pport(portcode, port_msg)
 
@@ -491,7 +497,7 @@ class myWindow(QtWidgets.QMainWindow):
         if 0 < current_index < len(self.biocals_order)-1:
             biocal_str = self.biocals_order[current_index]
             portcode = self.portcodes[f"biocals-{biocal_str}"]
-            msg = f"Biocals {biocal_str}"
+            msg = f"BiocalStarted-{biocal_str}"
             self.send_to_pport(portcode, msg)
         else:
             self.biocalsButton.setChecked(False)
