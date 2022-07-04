@@ -136,7 +136,9 @@ class myWindow(QtWidgets.QMainWindow):
         self.biocals_order = ["Welcome", "OpenEyes", "CloseEyes", "LookLeft",
             "LookRight", "LookUp", "LookDown", "BlinkEyes", "ClenchTeeth",
             "InhaleExhale", "HoldBreath", "ExtendHands", "FlexFeet",
-            "LucidIntro", "LucidSignalOpen", "LucidSignalClosed", "Thanks"]
+            "LucidSignalOpen", "LucidSignalClosed",
+            "LucidSignalOpen", "LucidSignalClosed",
+            "Thanks"]
 
         self.pport_address = C["pport_address"]            
         self.portcodes = {
@@ -152,7 +154,9 @@ class myWindow(QtWidgets.QMainWindow):
         }
 
         for i, s in enumerate(self.biocals_order):
-            self.portcodes[f"biocals-{s}"] = max(list(self.portcodes.values())) + 1
+            pc = max(list(self.portcodes.values())) + 1
+            assert pc < 245
+            self.portcodes[f"biocals-{s}"] = pc
 
         self.cues_directory = cues_directory
         self.noise_directory = noise_directory
